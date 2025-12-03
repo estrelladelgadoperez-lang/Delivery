@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Hospital Delivery</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+body {font-family:Segoe UI; margin:0; background:#f2f6f9}
+header {background:#0078d7;color:white;padding:1rem;text-align:center;position:relative}
+#notificacion {background:red;color:white;border-radius:50%;padding:5px 10px;position:absolute;right:20px;top:10px;display:none}
+main {max-width:900px;margin:auto;background:white;border-radius:12px;padding:2rem;margin-top:20px}
+
+input,select,button {padding:10px;border-radius:6px;border:1px solid #ccc}
+button {background:#0078d7;color:white;cursor:pointer}
+section {display:none}
+
+.categoria {background:#eaf2fa;border-radius:8px;padding:1rem;margin-top:10px}
+.producto {display:flex;justify-content:space-between;margin:6px 0}
+.pedidoBox {background:#f7fafc;padding:1rem;margin-top:10px;border-radius:8px}
+.logout{text-align:right}
+.stockEdit{width:80px}
+.alertaStock{color:red;font-weight:bold}
+#entregados {margin-top:20px;}
+#agregarArticulo {margin-top:20px; padding:10px; border:1px solid #ccc; border-radius:8px; background:#f7f7f7;}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>🏥 Hospital Delivery</h1>
+<span id="notificacion">0</span>
+</header>
+
+<main>
+
+<div class="logout" id="logoutSection">
+<button onclick="cerrarSesion()">Cerrar sesión</button>
+</div>
+
+<section id="loginSection">
+<h2>Iniciar sesión</h2>
+<form id="loginForm">
+<input type="email" id="loginCorreo" placeholder="Correo" required>
+<input type="password" id="loginPass" placeholder="Contraseña" required>
+<button>Entrar</button>
+</form>
+<p><a href="#" onclick="mostrarRegistro()">Registrarse</a></p>
+</section>
+
+<section id="registroSection">
+<h2>Registro</h2>
+<form id="registroForm">
+<input id="nombre" placeholder="Nombre completo" required>
+<input type="email" id="correo" placeholder="Correo" required>
+<input type="password" id="pass" placeholder="Contraseña" required>
+<select id="rol" required>
+<option value="">Selecciona rol</option>
+<option value="doctor">Doctor</option>
+<option value="paciente">Paciente</option>
+<option value="enfermero">Enfermero</option>
+</select>
+<button>Crear cuenta</button>
+</form>
+</section>
+
+<section id="productos">
+<h2>Catálogo</h2>
+<div id="listaCategorias"></div>
+
+<label>Selecciona enfermero:</label>
+<select id="selectEnfermero"></select>
+<br><br>
+<button onclick="enviarPedido()">Enviar pedido</button>
+</section>
+
+<section id="panelPedidos">
+<h2>Panel Enfermero</h2>
+
+<h3>Inventario</h3>
+<div id="listaInventario"></div>
+
+<h3>Pedidos Pendientes</h3>
+<div id="listaPedidos"></div>
+
+<h3 id="entregados">Pedidos Entregados</h3>
+<div id="listaEntregados"></div>
+
+<!-- NUEVO: Formulario para agregar artículos -->
+<div id="agregarArticulo">
+<h3>Agregar Artículo</h3>
+<input type="text" id="articuloNombre" placeholder="Nombre del artículo" required>
+<input type="text" id="articuloCategoria" placeholder="Categoría" required>
+<input type="number" id="articuloExistencias" placeholder="Existencias" min="0" required>
+<button onclick="agregarArticulo()">Agregar</button>
+</div>
+</section>
+
+</main>
+
+<script type="module">
+// ---------------- IMPORTS ----------------
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, browserSessionPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, getDoc, getDocs, query, where, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+// ---------------- CONFIG ----------------
+const firebaseConfig = {
+apiKey: "AIzaSyDpPKkgBLLDv2QoG9ObGfObZd5S-auUKhg",
+authDomain: "enfermeria-c2edc.firebaseapp.com",
+projectId: "enfermeria-c2edc",
+storageBucket: "enfermeria-c2edc.appspot.com",
+messagingSenderId: "955092319230",
+appId: "1:955092319230:web:66b5f8d168f6748ce45eaf"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth();
+const db = getFirestore();
+
+// ---------------- USAR SESSION STORAGE ----------------
+setPersistence(auth, browserSessionPersistence)
+  .then(() => console.log("Sesión por pestaña independiente (sessionStorage)"))
+  .catch(err => console.error("Error con sessionStorage:", err));
+
+// ---------------- UI ----------------
+const loginSection = document.getElementById("loginSection");
+const registroSection = document.getElementById("registroSection");
+const productos = document.getElementById("productos");
+const panelPedidos = document.getElementById("panelPedidos");
+const logoutSection = document.getElementById("logoutSection");
+const notificacion = document.getElementById("notificacion");
+
+const listaCategorias = document.getElementById("listaCategorias");
+const listaInventario = document.getElementById("listaInventario");
+const listaPedidos = document.getElementById("listaPedidos");
+const listaEntregados = document.getElementById("listaEntregados");
+const selectEnfermero = document.getElementById("selectEnfermero");
+
+const articuloNombre = document.getElementById("articuloNombre");
+const articuloCategoria = document.getElementById("articuloCategoria");
+const articuloExistencias = document.getElementById("articuloExistencias");
+
+// ---------------- FUNCIONES BASE ----------------
+function ocultarTodo(){
+loginSection.style.display = "none";
+registroSection.style.display = "none";
+productos.style.display = "none";
+panelPedidos.style.display = "none";
+logoutSection.style.display = "none";
+}
+
+// ---------------- REGISTRO ----------------
+registroForm.onsubmit = async e=>{
+e.preventDefault();
+const cred = await createUserWithEmailAndPassword(auth, correo.value, pass.value);
+
+await setDoc(doc(db,"usuarios",cred.user.uid),{
+nombre:nombre.value,
+correo:correo.value,
+rol:rol.value
+});
+
+alert("Cuenta creada ✅");
+registroSection.style.display="none";
+loginSection.style.display="block";
+};
+
+// ---------------- LOGIN ----------------
+loginForm.onsubmit = async e=>{
+e.preventDefault();
+await signInWithEmailAndPassword(auth, loginCorreo.value, loginPass.value);
+};
+
+// ---------------- CONTROL SESIÓN ----------------
+onAuthStateChanged(auth, async user=>{
+ocultarTodo();
+
+if(!user){
+loginSection.style.display="block";
+return;
+}
+
+logoutSection.style.display="block";
+
+const ref = doc(db,"usuarios",user.uid);
+const snap = await getDoc(ref);
+
+if(!snap.exists()){
+alert("Cuenta mal registrada");
+await signOut(auth);
+return;
+}
+
+const u = snap.data();
+
+if(u.rol === "enfermero"){
+panelPedidos.style.display = "block";
+cargarInventarioEditable();
+cargarPedidos(u.correo);
+}else{
+productos.style.display = "block";
+cargarCatalogo();
+cargarEnfermeros();
+}
+});
+
+// ---------------- NOTIFICACIONES ----------------
+if ("Notification" in window && Notification.permission !== "granted") {
+  Notification.requestPermission();
+}
+
+function mostrarNotificacion(titulo, mensaje) {
+  if (Notification.permission === "granted") {
+    new Notification(titulo, { body: mensaje });
+  }
+  const sonido = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+  sonido.play();
+}
+
+// ---------------- CATALOGO ----------------
+function cargarCatalogo(){
+onSnapshot(collection(db,"inventario"), snap=>{
+listaCategorias.innerHTML="";
+let cats={};
+
+snap.forEach(d=>{
+let p=d.data();
+if(!cats[p.categoria]) cats[p.categoria]=[];
+cats[p.categoria].push({...p,id:d.id});
+});
+
+Object.entries(cats).forEach(([cat,arr])=>{
+let div=document.createElement("div");
+div.className="categoria";
+div.innerHTML=`<h3>${cat}</h3>`;
+
+arr.forEach(p=>{
+let aviso = p.existencias<5 ? "<span class='alertaStock'>⚠ casi agotado</span>" : "";
+div.innerHTML+=`
+<div class="producto">
+<span>${p.nombre}${aviso} (Disp:${p.existencias})</span>
+<input type="number" min="0" max="${p.existencias}" value="0">
+</div>`;
+});
+listaCategorias.appendChild(div);
+});
+});
+}
+
+// ---------------- INVENTARIO ENFERMERO ----------------
+function cargarInventarioEditable(){
+onSnapshot(collection(db,"inventario"), snap=>{
+listaInventario.innerHTML="";
+snap.forEach(d=>{
+let p=d.data();
+listaInventario.innerHTML+=`
+<div class="producto">
+${p.nombre}
+<input class="stockEdit" type="number" min="0" value="${p.existencias}"
+onchange="actualizarStock('${d.id}',this.value)">
+</div>`;
+});
+});
+}
+
+window.actualizarStock = async (id,v)=>{
+v=parseInt(v);
+if(v<0) v=0;
+await updateDoc(doc(db,"inventario",id),{existencias:v});
+};
+
+// ---------------- AGREGAR ARTÍCULO ----------------
+window.agregarArticulo = async ()=>{
+const nombre = articuloNombre.value.trim();
+const categoria = articuloCategoria.value.trim();
+const existencias = parseInt(articuloExistencias.value);
+
+if(!nombre || !categoria || isNaN(existencias) || existencias < 0){
+  return alert("Completa todos los campos correctamente");
+}
+
+await addDoc(collection(db,"inventario"),{
+nombre,
+categoria,
+existencias
+});
+
+alert("Artículo agregado ✅");
+
+// Limpiar campos
+articuloNombre.value = "";
+articuloCategoria.value = "";
+articuloExistencias.value = "";
+};
+
+// ---------------- ENFERMEROS ----------------
+function cargarEnfermeros(){
+onSnapshot(query(collection(db,"usuarios"),where("rol","==","enfermero")), snap=>{
+selectEnfermero.innerHTML="";
+snap.forEach(d=>{
+let u=d.data();
+selectEnfermero.innerHTML+=`<option value="${u.correo}">${u.nombre}</option>`;
+});
+});
+}
+
+// ---------------- ENVIAR PEDIDO ----------------
+window.enviarPedido = async ()=>{
+const para = selectEnfermero.value;
+if(!para) return alert("Selecciona enfermero");
+
+let items=[];
+
+let prods=document.querySelectorAll(".producto");
+
+for(let p of prods){
+let nom=p.querySelector("span").innerText.split(" (")[0];
+let cant=parseInt(p.querySelector("input").value);
+
+if(!cant || cant<=0) continue;
+
+const q = query(collection(db,"inventario"),where("nombre","==",nom));
+const snap = await getDocs(q);
+
+if(snap.empty) return alert("No encontrado: "+nom);
+
+const docInv = snap.docs[0];
+const data = docInv.data();
+
+if(cant>data.existencias) return alert("Stock insuficiente de "+nom);
+
+await updateDoc(doc(db,"inventario",docInv.id),{
+existencias: data.existencias-cant
+});
+
+items.push({nombre:nom,cantidad:cant});
+}
+
+if(!items.length) return alert("No seleccionaste artículos");
+
+await addDoc(collection(db,"pedidos"),{
+de:auth.currentUser.email,
+para,
+items,
+fecha:new Date().toLocaleString(),
+estado:"pendiente"
+});
+
+alert("Pedido enviado ✅");
+};
+
+// ---------------- PEDIDOS ENFERMERO ----------------
+function cargarPedidos(correo){
+onSnapshot(query(collection(db,"pedidos"),where("para","==",correo)), snap=>{
+listaPedidos.innerHTML="";
+listaEntregados.innerHTML = "";
+let pendientes = 0;
+
+snap.forEach(d=>{
+let p=d.data();
+if(p.estado === "pendiente"){
+pendientes++;
+listaPedidos.innerHTML+=`
+<div class="pedidoBox">
+<b>${p.fecha}</b><br>
+${p.items.map(i=>`${i.nombre} (${i.cantidad})`).join("<br>")}
+<br><br>
+<button onclick="entregarPedido('${d.id}')">✔ Entregado</button>
+<button onclick="borrarPedido('${d.id}')">🗑 Eliminar</button>
+</div>`;
+}else if(p.estado === "entregado"){
+listaEntregados.innerHTML+=`
+<div class="pedidoBox">
+<b>${p.fecha}</b><br>
+${p.items.map(i=>`${i.nombre} (${i.cantidad})`).join("<br>")}
+</div>`;
+}
+});
+
+notificacion.style.display = pendientes ? "inline-block" : "none";
+notificacion.innerText = pendientes;
+
+if (pendientes > 0) mostrarNotificacion("📦 Nuevo pedido", `Tienes ${pendientes} pedido(s) pendiente(s)`);
+});
+}
+
+// ---------------- ENTREGADO / BORRAR ----------------
+window.entregarPedido = async id=>{
+await updateDoc(doc(db,"pedidos",id),{estado:"entregado"});
+alert("Pedido entregado");
+};
+
+window.borrarPedido = async id => {
+  if (confirm("¿Seguro que quieres eliminar este pedido?")) {
+    await deleteDoc(doc(db, "pedidos", id));
+    alert("Pedido eliminado");
+  }
+};
+
+// ---------------- CERRAR SESIÓN ----------------
+window.cerrarSesion = ()=>{
+signOut(auth);
+location.reload();
+};
+
+window.mostrarRegistro = ()=>{
+loginSection.style.display="none";
+registroSection.style.display="block";
+};
+</script>
+
+</body>
+</html>

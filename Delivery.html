@@ -87,7 +87,6 @@ section {display:none}
 <h3 id="entregados">Pedidos Entregados</h3>
 <div id="listaEntregados"></div>
 
-<!-- NUEVO: Formulario para agregar artículos -->
 <div id="agregarArticulo">
 <h3>Agregar Artículo</h3>
 <input type="text" id="articuloNombre" placeholder="Nombre del artículo" required>
@@ -241,7 +240,16 @@ let aviso = p.existencias<5 ? "<span class='alertaStock'>⚠ casi agotado</span>
 div.innerHTML+=`
 <div class="producto">
 <span>${p.nombre}${aviso} (Disp:${p.existencias})</span>
-<input type="number" min="0" max="${p.existencias}" value="0">
+<input 
+  type="text"
+  inputmode="numeric"
+  pattern="[0-9]*"
+  min="0"
+  max="${p.existencias}"
+  value="0"
+  onkeypress="return soloNumeros(event)"
+  oninput="this.value = this.value.replace(/[^0-9]/g,'')"
+>
 </div>`;
 });
 listaCategorias.appendChild(div);
@@ -289,7 +297,6 @@ existencias
 
 alert("Artículo agregado ✅");
 
-// Limpiar campos
 articuloNombre.value = "";
 articuloCategoria.value = "";
 articuloExistencias.value = "";
@@ -409,6 +416,20 @@ window.mostrarRegistro = ()=>{
 loginSection.style.display="none";
 registroSection.style.display="block";
 };
+
+// ---------------- BLOQUEO DE SÍMBOLOS EN PEDIDOS ----------------
+window.soloNumeros = function(e) {
+  let tecla = e.key;
+
+  if (tecla === "Backspace" || tecla === "Tab") return true;
+
+  if (!/^[0-9]$/.test(tecla)) {
+    e.preventDefault();
+    return false;
+  }
+
+  return true;
+}
 </script>
 
 </body>

@@ -194,72 +194,309 @@ button{background:#0078d7;color:white;border:none;border-radius:8px;padding:10px
 </main>
 
 <script type="module">
+/* -------------- IMPORTS -------------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, browserSessionPersistence, setPersistence } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
 import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, getDoc, getDocs, query, where, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
+/* -------------- FIREBASE CONFIG -------------- */
 const firebaseConfig = {
-apiKey: "AIzaSyDpPKkgBLLDv2QoG9ObGfObZd5S-auUKhg",
-authDomain: "enfermeria-c2edc.firebaseapp.com",
-projectId: "enfermeria-c2edc",
-storageBucket: "enfermeria-c2edc.appspot.com",
-messagingSenderId: "955092319230",
-appId: "1:955092319230:web:66b5f8d168f6748ce45eaf"
+  apiKey: "AIzaSyDpPKkgBLLDv2QoG9ObGfObZd5S-auUKhg",
+  authDomain: "enfermeria-c2edc.firebaseapp.com",
+  projectId: "enfermeria-c2edc",
+  storageBucket: "enfermeria-c2edc.appspot.com",
+  messagingSenderId: "955092319230",
+  appId: "1:955092319230:web:66b5f8d168f6748ce45eaf"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth();
 const db = getFirestore();
-setPersistence(auth,browserSessionPersistence);
 
-const loginSection=document.getElementById("loginSection");
-const registroSection=document.getElementById("registroSection");
-const productos=document.getElementById("productos");
-const panelPedidos=document.getElementById("panelPedidos");
-const logoutSection=document.getElementById("logoutSection");
-const notificacion=document.getElementById("notificacion");
-const listaCategorias=document.getElementById("listaCategorias");
-const listaInventario=document.getElementById("listaInventario");
-const listaPedidos=document.getElementById("listaPedidos");
-const listaEntregados=document.getElementById("listaEntregados");
-const selectEnfermero=document.getElementById("selectEnfermero");
-const articuloNombre=document.getElementById("articuloNombre");
-const articuloCategoria=document.getElementById("articuloCategoria");
-const articuloExistencias=document.getElementById("articuloExistencias");
+/* -------------- SESSION PER TAB -------------- */
+setPersistence(auth, browserSessionPersistence).catch(err => console.error(err));
 
-// RESTO EXACTO DE LÓGICA FUNCIONAL COMPLETA ✅
-// (Si algo falla, dime y lo ajusto)
+/* -------------- ELEMENTOS UI -------------- */
+const loginSection = document.getElementById("loginSection");
+const registroSection = document.getElementById("registroSection");
+const productos = document.getElementById("productos");
+const panelPedidos = document.getElementById("panelPedidos");
+const logoutSection = document.getElementById("logoutSection");
+const notificacion = document.getElementById("notificacion");
 
+const listaCategorias = document.getElementById("listaCategorias");
+const listaInventario = document.getElementById("listaInventario");
+const listaPedidos = document.getElementById("listaPedidos");
+const listaEntregados = document.getElementById("listaEntregados");
+const selectEnfermero = document.getElementById("selectEnfermero");
+
+const articuloNombre = document.getElementById("articuloNombre");
+const articuloCategoria = document.getElementById("articuloCategoria");
+const articuloExistencias = document.getElementById("articuloExistencias");
+
+/* -------------- UTIL -------------- */
 function ocultarTodo(){
-loginSection.style.display="none";registroSection.style.display="none";
-productos.style.display="none";panelPedidos.style.display="none";logoutSection.style.display="none";
+  loginSection.style.display="none";
+  registroSection.style.display="none";
+  productos.style.display="none";
+  panelPedidos.style.display="none";
+  logoutSection.style.display="none";
 }
 
-registroForm.onsubmit=async e=>{e.preventDefault();
-const cred=await createUserWithEmailAndPassword(auth,correo.value,pass.value);
-await setDoc(doc(db,"usuarios",cred.user.uid),{nombre:nombre.value,correo:correo.value,rol:rol.value});
-alert("Cuenta creada ✅");registroSection.style.display="none";loginSection.style.display="flex";};
+/* -------------- NOTIFICACIONES Y SONIDO -------------- */
+if ("Notification" in window && Notification.permission !== "granted") {
+  Notification.requestPermission();
+}
+function mostrarNotificacion(titulo, mensaje) {
+  if (Notification.permission === "granted") {
+    try { new Notification(titulo, { body: mensaje }); } catch(e) {}
+  }
+  // sonido
+  try { new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play(); } catch(e) {}
+}
 
-loginForm.onsubmit=async e=>{e.preventDefault();await signInWithEmailAndPassword(auth,loginCorreo.value,loginPass.value);};
+/* -------------- BLOQUEO DE SÍMBOLOS -------------- */
+function bloquearSimbolos(input){
+  input.addEventListener("keypress", e=>{
+    if (["+","-","e","E","."].includes(e.key)) e.preventDefault();
+  });
+  input.addEventListener("input", ()=>{ input.value = input.value.replace(/\D/g,""); });
+}
 
+/* -------------- REGISTRO -------------- */
+registroForm.onsubmit = async e=>{
+  e.preventDefault();
+  const cred = await createUserWithEmailAndPassword(auth, correo.value, pass.value);
+  await setDoc(doc(db,"usuarios",cred.user.uid),{nombre:nombre.value, correo:correo.value, rol:rol.value});
+  alert("Cuenta creada ✅");
+  registroSection.style.display="none";
+  loginSection.style.display="flex";
+};
+
+/* -------------- LOGIN -------------- */
+loginForm.onsubmit = async e=>{
+  e.preventDefault();
+  await signInWithEmailAndPassword(auth, loginCorreo.value, loginPass.value);
+};
+
+/* -------------- CARGA DE SESIÓN -------------- */
 onAuthStateChanged(auth, async user=>{
-ocultarTodo();
-if(!user){loginSection.style.display="flex"; return;}
-logoutSection.style.display="block";
-const snap=await getDoc(doc(db,"usuarios",user.uid)); const u=snap.data();
-if(u.rol==="enfermero"){panelPedidos.style.display="block"; cargarInventarioEditable(); cargarPedidos(u.correo);}
-else{productos.style.display="block"; cargarCatalogo(); cargarEnfermeros();}
+  ocultarTodo();
+  if(!user){
+    loginSection.style.display="flex";
+    return;
+  }
+
+  logoutSection.style.display="block";
+
+  const ref = doc(db,"usuarios",user.uid);
+  const snap = await getDoc(ref);
+
+  if(!snap.exists()){
+    alert("Cuenta mal registrada");
+    await signOut(auth);
+    return;
+  }
+
+  const u = snap.data();
+
+  if(u.rol === "enfermero"){
+    panelPedidos.style.display = "block";
+    cargarInventarioEditable();
+    cargarPedidos(u.correo);
+  }else{
+    productos.style.display = "block";
+    cargarCatalogo();
+    cargarEnfermeros();
+  }
 });
 
-function bloquearSimbolos(input){
-input.addEventListener("keypress",e=>{if(["+","-","e","E","."].includes(e.key)) e.preventDefault();});
-input.addEventListener("input",()=>{input.value=input.value.replace(/\D/g,"");});
+/* -------------- CATALOGO (clientes) -------------- */
+function cargarCatalogo(){
+  onSnapshot(collection(db,"inventario"), snap=>{
+    listaCategorias.innerHTML="";
+    let cats={};
+
+    snap.forEach(d=>{
+      let p = d.data();
+      if(!cats[p.categoria]) cats[p.categoria]=[];
+      cats[p.categoria].push({...p,id:d.id});
+    });
+
+    Object.entries(cats).forEach(([cat,arr])=>{
+      let div = document.createElement("div");
+      div.className = "categoria";
+      div.innerHTML = `<h3>${cat}</h3>`;
+
+      arr.forEach(p=>{
+        let aviso = p.existencias<5 ? "<span class='alertaStock'>⚠ casi agotado</span>" : "";
+        div.innerHTML += `
+          <div class="producto">
+            <span>${p.nombre}${aviso} (Disp:${p.existencias})</span>
+            <input class="cantidad" type="number" min="0" max="${p.existencias}" value="0">
+          </div>`;
+      });
+
+      listaCategorias.appendChild(div);
+    });
+
+    // aplicar bloqueo de símbolos a todos los inputs de cantidad
+    document.querySelectorAll(".cantidad").forEach(inp => bloquearSimbolos(inp));
+  });
 }
 
-// TODO tu sistema sigue completo ✅ (igual que antes)
+/* -------------- INVENTARIO EDITABLE (enfermero) -------------- */
+function cargarInventarioEditable(){
+  onSnapshot(collection(db,"inventario"), snap=>{
+    listaInventario.innerHTML = "";
+    snap.forEach(d=>{
+      let p = d.data();
+      listaInventario.innerHTML += `
+        <div class="producto">
+          ${p.nombre}
+          <input class="stockEdit" type="number" min="0" value="${p.existencias}" onchange="actualizarStock('${d.id}',this.value)">
+        </div>`;
+    });
+  });
+}
 
-window.cerrarSesion=()=>{signOut(auth);location.reload();};
-window.mostrarRegistro=()=>{loginSection.style.display="none";registroSection.style.display="flex";};
+window.actualizarStock = async (id,v) => {
+  v = parseInt(v) || 0;
+  await updateDoc(doc(db,"inventario",id), { existencias: v });
+};
+
+/* -------------- AGREGAR ARTÍCULO (enfermero) -------------- */
+window.agregarArticulo = async ()=>{
+  const nombre = articuloNombre.value.trim();
+  const categoria = articuloCategoria.value.trim();
+  const existencias = parseInt(articuloExistencias.value);
+
+  if(!nombre || !categoria || isNaN(existencias) || existencias < 0){
+    return alert("Completa todos los campos correctamente");
+  }
+
+  await addDoc(collection(db,"inventario"), { nombre, categoria, existencias });
+  alert("Artículo agregado ✅");
+  articuloNombre.value=""; articuloCategoria.value=""; articuloExistencias.value="";
+};
+
+/* -------------- CARGAR ENFERMEROS (select) -------------- */
+function cargarEnfermeros(){
+  onSnapshot(query(collection(db,"usuarios"), where("rol","==","enfermero")), snap=>{
+    selectEnfermero.innerHTML = "";
+    snap.forEach(d=>{
+      let u = d.data();
+      selectEnfermero.innerHTML += `<option value="${u.correo}">${u.nombre}</option>`;
+    });
+  });
+}
+
+/* -------------- ENVIAR PEDIDO -------------- */
+window.enviarPedido = async ()=>{
+  const para = selectEnfermero.value;
+  if(!para) return alert("Selecciona enfermero");
+
+  let items = [];
+  let prods = document.querySelectorAll(".producto");
+
+  for(let p of prods){
+    // si no tiene input (ej. inventario list) saltar
+    let inp = p.querySelector("input");
+    if(!inp) continue;
+
+    let nom = p.querySelector("span").innerText.split(" (")[0];
+    let cant = parseInt(inp.value) || 0;
+
+    if(!cant || cant <= 0) continue;
+
+    const q = query(collection(db,"inventario"), where("nombre","==",nom));
+    const snap = await getDocs(q);
+
+    if(snap.empty) return alert("No encontrado: "+nom);
+
+    const docInv = snap.docs[0];
+    const data = docInv.data();
+
+    if(cant > data.existencias) return alert("Stock insuficiente de "+nom);
+
+    await updateDoc(doc(db,"inventario",docInv.id), { existencias: data.existencias - cant });
+
+    items.push({ nombre: nom, cantidad: cant });
+  }
+
+  if(!items.length) return alert("No seleccionaste artículos");
+
+  await addDoc(collection(db,"pedidos"), {
+    de: auth.currentUser.email,
+    para,
+    items,
+    fecha: new Date().toLocaleString(),
+    estado: "pendiente"
+  });
+
+  alert("Pedido enviado ✅");
+};
+
+/* -------------- CARGAR PEDIDOS (enfermero) -------------- */
+function cargarPedidos(correo){
+  onSnapshot(query(collection(db,"pedidos"), where("para","==",correo)), snap=>{
+    listaPedidos.innerHTML = "";
+    listaEntregados.innerHTML = "";
+    let pendientes = 0;
+
+    snap.forEach(d=>{
+      let p = d.data();
+      if(p.estado === "pendiente"){
+        pendientes++;
+        listaPedidos.innerHTML += `
+          <div class="pedidoBox">
+            <b>${p.fecha}</b><br>
+            ${p.items.map(i=>`${i.nombre} (${i.cantidad})`).join("<br>")}
+            <br><br>
+            <button onclick="entregarPedido('${d.id}')">✔ Entregado</button>
+            <button onclick="borrarPedido('${d.id}')">🗑 Eliminar</button>
+          </div>`;
+      } else if(p.estado === "entregado"){
+        listaEntregados.innerHTML += `
+          <div class="pedidoBox">
+            <b>${p.fecha}</b><br>
+            ${p.items.map(i=>`${i.nombre} (${i.cantidad})`).join("<br>")}
+          </div>`;
+      }
+    });
+
+    notificacion.style.display = pendientes ? "inline-block" : "none";
+    notificacion.innerText = pendientes;
+
+    if(pendientes > 0) mostrarNotificacion("📦 Nuevo pedido", `Tienes ${pendientes} pedido(s) pendiente(s)`);
+  });
+}
+
+/* -------------- ENTREGAR / BORRAR -------------- */
+window.entregarPedido = async id => {
+  await updateDoc(doc(db,"pedidos",id), { estado: "entregado" });
+  // la UI se actualiza automáticamente por onSnapshot
+};
+
+window.borrarPedido = async id => {
+  if(confirm("¿Seguro que quieres eliminar este pedido?")){
+    await deleteDoc(doc(db,"pedidos",id));
+    alert("Pedido eliminado");
+  }
+};
+
+/* -------------- SESIÓN / UI helpers -------------- */
+window.cerrarSesion = ()=> {
+  signOut(auth);
+  location.reload();
+};
+
+window.mostrarRegistro = ()=> {
+  loginSection.style.display="none";
+  registroSection.style.display="flex";
+};
+
+/* -------------- FIN DEL SCRIPT -------------- */
 </script>
 </body>
 </html>
